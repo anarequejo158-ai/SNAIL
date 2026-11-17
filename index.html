@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#063a66">
+<title>Flash: Salto Submarino</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#031c3c;color:#fff;font-family:system-ui,-apple-system,Segoe UI,sans-serif;touch-action:none}
+#app{position:relative;width:100vw;height:100dvh;max-width:520px;margin:auto;overflow:hidden;background:linear-gradient(#19c8ca,#07164c)}
+canvas{width:100%;height:100%;display:block}
+.screen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:22px;text-align:center;background:linear-gradient(180deg,rgba(0,190,185,.15),rgba(0,14,62,.7))}
+.hidden{display:none!important}
+h1{font-size:clamp(30px,9vw,48px);line-height:1.02;margin:8px 0;text-shadow:0 4px 0 #073d55}
+h2{font-size:26px;margin:8px}
+p{max-width:330px;line-height:1.4}
+button{border:0;border-radius:999px;padding:13px 24px;background:#d9ff22;color:#092e43;font-size:18px;font-weight:900;box-shadow:0 5px 0 #769c00;cursor:pointer;transition:transform .12s,filter .12s;margin:7px}
+button:active{transform:scale(.91);filter:brightness(1.15)}
+button.secondary{background:#50e4d5;box-shadow:0 5px 0 #087c83}
+#logo{width:min(72%,300px);max-height:35vh;object-fit:contain;border-radius:18px}
+.pill{padding:8px 13px;background:#042e59bb;border:1px solid #7ffff0;border-radius:20px;margin:4px}
+#hud{position:absolute;top:env(safe-area-inset-top,8px);left:8px;right:8px;display:flex;align-items:center;gap:6px;z-index:3;pointer-events:none}
+#hud button{pointer-events:auto;margin:0;padding:7px 10px;font-size:13px}
+#hud .spacer{flex:1}
+#levelLabel,#scoreLabel{font-weight:800;text-shadow:0 2px 4px #001}
+#toast{position:absolute;top:18%;left:10%;right:10%;text-align:center;font-weight:900;font-size:20px;text-shadow:0 2px 5px #001;pointer-events:none}
+#customColors{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:12px}
+.swatch{width:42px;height:42px;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px #001}
+.small{font-size:12px;opacity:.9}
+#tiltHint{position:absolute;bottom:14px;left:12px;right:12px;text-align:center;font-size:12px;text-shadow:0 2px 4px #001;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="app">
+<canvas id="game"></canvas>
+<div id="hud" class="hidden">
+<button id="pauseBtn">Ⅱ</button><button id="exitBtn">✕</button>
+<div class="spacer"></div><span id="levelLabel">NIVEL 1</span><span class="pill" id="scoreLabel">0 m</span>
+</div>
+<div id="toast"></div>
+<div id="menu" class="screen">
+<img id="logo" src="assets/logo.png" alt="Flash: Salto Submarino">
+<h1>FLASH<br>SALTO SUBMARINO</h1>
+<p>Ayuda a Flash a subir desde las profundidades hasta la superficie. Inclina tu celular para moverte.</p>
+<button id="playBtn">JUGAR</button>
+<button class="secondary" id="characterBtn">PERSONALIZAR CARACOL</button>
+<button class="secondary" id="controlsBtn">CONTROLES</button>
+<div class="small">Prototipo jugable · modo vertical</div>
+</div>
+<div id="character" class="screen hidden">
+<h2>ELIGE EL COLOR DE FLASH</h2>
+<div id="preview" style="width:130px;height:100px"></div>
+<div id="customColors"></div>
+<button id="saveCharacter">CONFIRMAR</button><button class="secondary" id="backCharacter">VOLVER</button>
+</div>
+<div id="controls" class="screen hidden">
+<h2>¿CÓMO JUGAR?</h2>
+<p>Inclina el celular a izquierda o derecha para mover a Flash. En computadora usa A/D o las flechas. Flash salta automáticamente al tocar una roca.</p>
+<p>Evita al pulpo, al cangrejo y al pez globo. Recoge los potenciadores de algas, burbujas y coral.</p>
+<button id="controlsBack">ENTENDIDO</button>
+</div>
+<div id="pause" class="screen hidden">
+<h2>PAUSA</h2><button id="resumeBtn">CONTINUAR</button><button class="secondary" id="restartBtn">REINICIAR NIVEL</button><button class="secondary" id="pauseExitBtn">SALIR AL MENÚ</button>
+</div>
+<div id="gameover" class="screen hidden">
+<h2>¡FLASH HA CAÍDO!</h2><p id="gameoverText">Inténtalo de nuevo.</p><button id="retryBtn">VOLVER A INTENTAR</button><button class="secondary" id="gameoverExit">MENÚ PRINCIPAL</button>
+</div>
+<div id="reward" class="screen hidden">
+<h2>¡MUNDO COMPLETADO!</h2>
+<div style="font-size:74px;animation:chest .7s infinite alternate">🧰</div>
+<p id="rewardText">Has llegado a la superficie.</p><div class="pill">+ monedas · + experiencia</div>
+<button id="nextBtn">CONTINUAR</button>
+</div>
+<div id="tiltHint" class="hidden">Inclina el celular para moverte · A/D o ←/→ en computadora</div>
+</div>
+<style>@keyframes chest{from{transform:scale(.9) rotate(-3deg)}to{transform:scale(1.08) rotate(3deg)}}</style>
+<script>
+(()=>{
+const $=id=>document.getElementById(id), canvas=$('game'),ctx=canvas.getContext('2d');
+const W=390,H=780;
+let dpr=1; function resize(){dpr=Math.min(devicePixelRatio||1,2);canvas.width=Math.round(canvas.clientWidth*dpr);canvas.height=Math.round(canvas.clientHeight*dpr);ctx.setTransform(canvas.width/W,0,0,canvas.height/H,0,0)} addEventListener('resize',resize);resize();
+const img={}; const files=['fondo-nivel-1.png','fondo-nivel-2.png','fondo-nivel-3.png','roca.jpg','pulpo.jpg','cangrejo.jpg','pez-globo.jpg','algas.jpg','burbujas.jpg','corales.jpg'];
+files.forEach(f=>{img[f]=new Image();img[f].src='assets/'+f});
+const music={a:new Audio('assets/a.mp3'),b:new Audio('assets/b.mp3'),c:new Audio('assets/c.mp3'),d:new Audio('assets/d.mp3'),e:new Audio('assets/e.mp3')};
+Object.values(music).forEach(a=>{a.loop=true;a.volume=.38});
+function playMusic(k){Object.entries(music).forEach(([n,a])=>{if(n===k){if(a.paused)a.play().catch(()=>{})}else{a.pause();a.currentTime=0}})}
+const screens=['menu','character','controls','pause','gameover','reward'];
+function show(id){screens.forEach(s=>$(s).classList.toggle('hidden',s!==id));$('hud').classList.toggle('hidden',id!=='playing');$('tiltHint').classList.toggle('hidden',id!=='playing');}
+let chosenColor='#65ad4d',level=1,playing=false,paused=false,score=0,worldY=0, cameraY=0, last=0, raf=0;
+const colors=['#65ad4d','#29b8d1','#ed8d39','#b86bd8','#e95d76','#e7d34b'];
+let inputX=0,keys={},player,platforms,enemies,powers,particles,levelConfig;
+function snail(x,y,scale=1,flash=0){ctx.save();ctx.translate(x,y);ctx.scale(scale,scale);
+ctx.fillStyle='rgba(0,0,0,.25)';ctx.beginPath();ctx.ellipse(0,23,27,7,0,0,Math.PI*2);ctx.fill();
+// shell
+ctx.fillStyle=flash?'#ff3333':chosenColor;ctx.strokeStyle='#103c39';ctx.lineWidth=3;
+ctx.beginPath();ctx.ellipse(-3,0,25,27,-.3,0,Math.PI*2);ctx.fill();ctx.stroke();
+ctx.strokeStyle='#174a37';ctx.lineWidth=4;ctx.beginPath();ctx.arc(-6,2,15,.3,Math.PI*1.8);ctx.stroke();
+ctx.fillStyle=flash?'#ff6666':'#a6d86d';ctx.beginPath();ctx.ellipse(14,12,13,9,0,0,Math.PI*2);ctx.fill();ctx.stroke();
+ctx.strokeStyle='#173c39';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(13,5);ctx.lineTo(15,-10);ctx.moveTo(23,5);ctx.lineTo(25,-10);ctx.stroke();
+ctx.fillStyle='white';ctx.beginPath();ctx.ellipse(15,-12,5,8,0,0,Math.PI*2);ctx.ellipse(25,-12,5,8,0,0,Math.PI*2);ctx.fill();
+ctx.fillStyle='#101b2c';ctx.beginPath();ctx.arc(16,-11,2,0,7);ctx.arc(26,-11,2,0,7);ctx.fill();ctx.restore()}
+function config(){return level===1?{count:20,speed:38,enemyCount:3,powerChance:.42}:(level===2?{count:15,speed:76,enemyCount:4,powerChance:.28}:{count:10,speed:76,enemyCount:7,powerChance:.12})}
+function startLevel(n){level=n;levelConfig=config();score=0;worldY=0;cameraY=0;inputX=0;
+platforms=[];enemies=[];powers=[];particles=[];
+player={x:W/2,y:H-145,vx:0,vy:-420,falling:false,hit:0,hitFlash:0,shield:0,boost:0};
+const gap=105;for(let i=0;i<levelConfig.count;i++){let y=H-70-i*gap;platforms.push({x:35+Math.random()*230,y,w:90,h:35,vx:(Math.random()<.5?-1:1)*(levelConfig.speed*.35+Math.random()*levelConfig.speed*.35),base:i===0,used:false});}
+for(let i=0;i<levelConfig.enemyCount;i++){let y=H-250-i*(H*levelConfig.count/levelConfig.enemyCount/1.25);enemies.push({x:Math.random()*280+40,y,w:52,h:48,vx:(Math.random()<.5?-1:1)*(50+level*14),type:i%3});}
+platforms.forEach((p,i)=>{if(!p.base&&Math.random()<levelConfig.powerChance)p.power=['algas','burbujas','corales'][Math.floor(Math.random()*3)];});
+playing=true;paused=false;show('playing');$('levelLabel').textContent='NIVEL '+level;playMusic(['','b','c','d'][level]);$('toast').textContent='';last=performance.now();cancelAnimationFrame(raf);raf=requestAnimationFrame(loop)}
+function drawBg(){let key='fondo-nivel-'+level+'.png',im=img[key];if(im.complete&&im.naturalWidth){let scale=W/im.width, visibleSrcH=H/scale;let sy=((cameraY*.45)%Math.max(1,im.height-visibleSrcH));ctx.drawImage(im,0,sy,im.width,visibleSrcH,0,0,W,H)}else{let g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#08b9c9');g.addColorStop(1,'#061b53');ctx.fillStyle=g;ctx.fillRect(0,0,W,H)}
+// drifting light and fish silhouettes
+let t=performance.now()/1000;ctx.globalAlpha=.12;for(let i=0;i<5;i++){let x=((i*100+t*(10+i*3))%(W+100))-50;ctx.fillStyle='#d8ffff';ctx.beginPath();ctx.ellipse(x,90+i*135,34,9,0,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.moveTo(x-25,90+i*135);ctx.lineTo(x-42,80+i*135);ctx.lineTo(x-42,100+i*135);ctx.fill()}ctx.globalAlpha=1}
+function drawAsset(name,x,y,w,h){let im=img[name];if(im&&im.complete&&im.naturalWidth)ctx.drawImage(im,x,y,w,h);else{ctx.fillStyle='#6d8b85';ctx.beginPath();ctx.ellipse(x+w/2,y+h/2,w/2,h/2,0,0,7);ctx.fill()}}
+function loop(now){if(!playing||paused)return;let dt=Math.min(.032,(now-last)/1000);last=now;update(dt);render();raf=requestAnimationFrame(loop)}
+function update(dt){
+let target=inputX;if(keys.ArrowLeft||keys.a)target=-1;if(keys.ArrowRight||keys.d)target=1;
+player.vx+=(target*260-player.vx)*Math.min(1,dt*5);player.x+=player.vx*dt;
+if(player.x<-25)player.x=W+25;if(player.x>W+25)player.x=-25;
+player.vy+=780*dt;player.y+=player.vy*dt;
+platforms.forEach(p=>{if(!p.base){p.x+=p.vx*dt;if(p.x<0||p.x+p.w>W)p.vx*=-1}
+let py=p.y-cameraY;
+if(player.vy>0&&player.x>p.x-18&&player.x<p.x+p.w+18&&player.y+18>=py&&player.y+18<=py+18+player.vy*dt+3){player.y=py-18;player.vy=-430;player.falling=false;p.used=true;if(p.power){activatePower(p.power);p.power=null}}});
+enemies.forEach(e=>{e.x+=e.vx*dt;if(e.x<0||e.x+e.w>W)e.vx*=-1;let ey=e.y-cameraY;let dx=player.x-(e.x+e.w/2),dy=player.y-(ey+e.h/2);if(Math.abs(dx)<31&&Math.abs(dy)<29&&player.hit<=0&&player.shield<=0){player.hit=1.25;player.vy=-190;player.falling=true}});
+if(player.hit>0){player.hit-=dt;player.hitFlash=Math.floor((1.25-player.hit)/.19)%2===0?1:0}else player.hitFlash=0;
+if(player.shield>0)player.shield-=dt;if(player.boost>0){player.boost-=dt;player.vy=Math.min(player.vy,-540)}
+if(player.y< H*.42){let delta=H*.42-player.y;player.y+=delta;cameraY-=delta;score=Math.max(score,Math.floor(-cameraY/10))}
+if(player.y>H+65){endGame();return}
+let goalScore=Math.floor((H*.42-(H-70-105*(levelConfig.count-1)))/10);if(score>=goalScore){playing=false;show('reward');playMusic('e');$('rewardText').textContent='Nivel '+level+' completado · '+score+' m';return}
+$('scoreLabel').textContent=score+' m';
+}
+function activatePower(p){player.shield= p==='corales'?5:0;player.boost=p==='burbujas'?3:0;if(p==='algas'){player.vy=-620} $('toast').textContent=p==='algas'?'¡IMPULSO DE ALGAS!':p==='burbujas'?'¡BURBUJAS DE VELOCIDAD!':'¡ESCUDO DE CORAL!';setTimeout(()=>{$('toast').textContent=''},1100)}
+function render(){ctx.clearRect(0,0,W,H);drawBg();
+platforms.forEach(p=>{let y=p.y-cameraY;if(y<-60||y>H+60)return;drawAsset('roca.jpg',p.x,y,p.w,p.h);if(p.power){let key=p.power+'.jpg';drawAsset(key,p.x+28,y-31,34,34)}});
+enemies.forEach(e=>{let y=e.y-cameraY;if(y<-70||y>H+70)return;let key=['pulpo.jpg','cangrejo.jpg','pez-globo.jpg'][e.type];let wob=Math.sin(performance.now()/190+e.x)*3;drawAsset(key,e.x,y+wob,e.w,e.h)});
+if(player.hitFlash){snail(player.x,player.y,1,1)}else{snail(player.x,player.y,1,0)}
+if(player.shield>0){ctx.strokeStyle=`rgba(150,255,255,${.45+.2*Math.sin(performance.now()/100)})`;ctx.lineWidth=4;ctx.beginPath();ctx.arc(player.x,player.y,36,0,Math.PI*2);ctx.stroke()}
+}
+function endGame(){playing=false;show('gameover');playMusic('e');$('gameoverText').textContent='Llegaste a '+score+' m. ¡Vuelve a intentarlo!'}
+function menu(){playing=false;show('menu');playMusic('a')}
+$('playBtn').onclick=()=>{playMusic('e');startLevel(1)};
+$('characterBtn').onclick=()=>{show('character');playMusic('a');renderPreview()};
+$('controlsBtn').onclick=()=>{show('controls');playMusic('a')};
+$('controlsBack').onclick=menu;$('backCharacter').onclick=menu;
+function renderPreview(){let c=$('preview');c.innerHTML='';let cv=document.createElement('canvas');cv.width=160;cv.height=120;c.appendChild(cv);let cc=cv.getContext('2d');cc.fillStyle=chosenColor;cc.beginPath();cc.ellipse(72,55,33,36,0,0,7);cc.fill();cc.strokeStyle='#173c39';cc.lineWidth=4;cc.stroke();cc.fillStyle='white';cc.beginPath();cc.arc(102,38,9,0,7);cc.arc(121,38,9,0,7);cc.fill()}
+colors.forEach(c=>{let b=document.createElement('button');b.className='swatch';b.style.background=c;b.onclick=()=>{chosenColor=c;renderPreview()};$('customColors').appendChild(b)});
+$('saveCharacter').onclick=menu;$('pauseBtn').onclick=()=>{paused=true;show('pause');playMusic('a')};$('resumeBtn').onclick=()=>{paused=false;show('playing');playMusic(['','b','c','d'][level]);last=performance.now();raf=requestAnimationFrame(loop)};
+$('exitBtn').onclick=menu;$('pauseExitBtn').onclick=menu;$('restartBtn').onclick=()=>startLevel(level);$('retryBtn').onclick=()=>startLevel(level);$('gameoverExit').onclick=menu;
+$('nextBtn').onclick=()=>{if(level<3)startLevel(level+1);else{menu()}};
+addEventListener('keydown',e=>{keys[e.key]=true;if(['ArrowLeft','ArrowRight',' '].includes(e.key))e.preventDefault()});addEventListener('keyup',e=>keys[e.key]=false);
+let pointerDown=false;canvas.addEventListener('pointerdown',e=>{pointerDown=true;setPointer(e)});canvas.addEventListener('pointermove',e=>{if(pointerDown)setPointer(e)});addEventListener('pointerup',()=>{pointerDown=false;inputX=0});
+function setPointer(e){let r=canvas.getBoundingClientRect();inputX=((e.clientX-r.left)/r.width-.5)*2}
+function tilt(e){if(typeof e.gamma==='number')inputX=Math.max(-1,Math.min(1,e.gamma/28))}
+async function enableTilt(){try{if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){let p=await DeviceOrientationEvent.requestPermission();if(p==='granted')addEventListener('deviceorientation',tilt)}else addEventListener('deviceorientation',tilt)}catch(e){}}
+$('playBtn').addEventListener('click',enableTilt);
+playMusic('a');show('menu');
+})();
+</script>
+</body></html>
